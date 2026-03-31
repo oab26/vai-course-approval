@@ -30,7 +30,7 @@ def notify_admin_review_requested(course_key, course_name, instructor_user):
                 f'"{course_name}" and is requesting your review.\n\n'
                 f'Review in Studio:\n{studio_url}\n'
             ),
-            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@bytecrew.net'),
+            from_email=getattr(settings, 'COURSE_APPROVAL_FROM_EMAIL', 'noreply@updates.bytecrew.net'),
             recipient_list=[admin_email],
             fail_silently=True,
         )
@@ -53,7 +53,7 @@ def notify_instructor_published(course_key, course_name, instructor_user):
                 f'and published.\n\n'
                 f'Students can now see the updated content.\n'
             ),
-            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@bytecrew.net'),
+            from_email=getattr(settings, 'COURSE_APPROVAL_FROM_EMAIL', 'noreply@updates.bytecrew.net'),
             recipient_list=[instructor_user.email],
             fail_silently=True,
         )
