@@ -8,13 +8,13 @@ app_name = 'course_approval'
 
 urlpatterns = [
     path(
-        'submit/<str:course_key_string>/',
-        views.submit_for_review,
-        name='submit_for_review',
+        'has-changes/<str:course_key_string>/',
+        views.has_changes,
+        name='has_changes',
     ),
     path(
-        'status/<str:course_key_string>/',
-        views.get_approval_status,
-        name='approval_status',
+        'notify/<str:course_key_string>/',
+        views.notify_admin,
+        name='notify_admin',
     ),
 ]

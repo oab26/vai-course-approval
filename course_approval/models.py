@@ -5,44 +5,27 @@ from django.db import models
 from opaque_keys.edx.django.models import CourseKeyField
 
 
-class CourseApprovalRequest(models.Model):
-    """Tracks the approval state of a course."""
+class CourseNotification(models.Model):
+    """Tracks when an instructor requests admin review for a course."""
 
-    STATUS_CHOICES = [
-        ('draft', 'Draft'),
-        ('pending_review', 'Pending Review'),
-        ('approved', 'Approved'),
-        ('rejected', 'Rejected'),
-    ]
-
-    course_key = CourseKeyField(max_length=255, unique=True, db_index=True)
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default='draft'
-    )
-    submitted_by = models.ForeignKey(
+    course_key = CourseKeyField(max_length=255, db_index=True)
+    notified_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='submitted_courses',
+        on_delete=models.CASCADE,
+        related_name='course_notifications',
     )
-    reviewed_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='reviewed_courses',
-    )
-    submitted_at = models.DateTimeField(null=True, blank=True)
-    reviewed_at = models.DateTimeField(null=True, blank=True)
-    reviewer_notes = models.TextField(blank=True, default='')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    notified_at = models.DateTimeField()
+    published_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         app_label = 'course_approval'
-        verbose_name = 'Course Approval Request'
-        verbose_name_plural = 'Course Approval Requests'
+        unique_together = ('course_key', 'notified_by')
 
     def __str__(self):
-        return f'{self.course_key} [{self.status}]'
+        status = 'published' if self.published_at else 'pending'
+        return f'{self.course_key} by {self.notified_by.username} [{status}]'
+
+    @property
+    def is_active(self):
+        """Notification is active if notified but not yet published."""
+        return self.notified_at is not None and self.published_at is None

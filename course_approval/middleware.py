@@ -1,4 +1,4 @@
-"""CMS middleware to block export and advanced settings for non-admin users."""
+"""CMS middleware to block publish, export, and advanced settings for non-admin users."""
 
 import json
 import logging
@@ -11,6 +11,7 @@ log = logging.getLogger(__name__)
 class CourseApprovalMiddleware:
     """
     Blocks non-global-staff users from:
+    - Publishing course content (units, sections, subsections)
     - Exporting courses (IP protection)
     - Writing to Advanced Settings (prevents visibility/start date changes)
 
@@ -54,4 +55,26 @@ class CourseApprovalMiddleware:
                 status=403,
             )
 
+        # Block publish actions on xblocks
+        if '/xblock/' in path and method == 'POST':
+            if self._is_publish_request(request):
+                log.info(
+                    'CourseApproval: blocked publish for user=%s path=%s',
+                    request.user.username, path,
+                )
+                return JsonResponse(
+                    {'error': 'Publishing requires administrator approval. Please notify the admin for review.'},
+                    status=403,
+                )
+
         return self.get_response(request)
+
+    def _is_publish_request(self, request):
+        """Check if the POST to /xblock/ is a publish action."""
+        try:
+            body = request.body.decode('utf-8')
+            data = json.loads(body)
+            # Studio sends publish actions with "publish" field
+            return data.get('publish') in ('make_public', 'make_private')
+        except (json.JSONDecodeError, UnicodeDecodeError, AttributeError):
+            return False
