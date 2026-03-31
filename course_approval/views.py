@@ -104,8 +104,8 @@ def _check_user_has_unpublished_changes(user, course_key):
                     has_changes = True
                     break
 
-        # Cache for 60 seconds
-        cache.set(cache_key, has_changes, 60)
+        # Cache for 5 minutes to avoid slow modulestore walks on every page load
+        cache.set(cache_key, has_changes, 300)
         return has_changes
 
     except Exception:
