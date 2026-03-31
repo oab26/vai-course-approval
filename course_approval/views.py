@@ -1,5 +1,6 @@
 """API views for course approval workflow."""
 
+import functools
 import logging
 
 from django.core.cache import cache
@@ -12,6 +13,30 @@ from opaque_keys.edx.keys import CourseKey
 
 from .emails import notify_admin_review_requested
 from .models import CourseNotification
+
+
+def cors_response(response, request=None):
+    """Add CORS headers so MFE can call these endpoints cross-origin."""
+    origin = ''
+    if request:
+        origin = request.META.get('HTTP_ORIGIN', '')
+    response['Access-Control-Allow-Origin'] = origin or '*'
+    response['Access-Control-Allow-Credentials'] = 'true'
+    response['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response['Access-Control-Allow-Headers'] = 'Content-Type, X-CSRFToken'
+    return response
+
+
+def cors_api(view_func):
+    """Decorator that adds CORS headers and handles OPTIONS preflight."""
+    @functools.wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if request.method == 'OPTIONS':
+            response = JsonResponse({})
+            return cors_response(response, request)
+        response = view_func(request, *args, **kwargs)
+        return cors_response(response, request)
+    return wrapper
 
 log = logging.getLogger(__name__)
 
@@ -89,9 +114,11 @@ def _check_user_has_unpublished_changes(user, course_key):
 
 
 @csrf_exempt
-@require_GET
+@cors_api
 def has_changes(request, course_key_string):
     """Check if current user has unpublished changes in the course."""
+    if request.method not in ('GET', 'OPTIONS'):
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'Authentication required'}, status=401)
 
@@ -123,9 +150,11 @@ def has_changes(request, course_key_string):
 
 
 @csrf_exempt
-@require_POST
+@cors_api
 def notify_admin(request, course_key_string):
     """Instructor notifies admin that changes are ready for review."""
+    if request.method not in ('POST', 'OPTIONS'):
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
     if not request.user.is_authenticated:
         return JsonResponse({'error': 'Authentication required'}, status=401)
 
