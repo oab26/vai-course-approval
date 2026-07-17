@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 
 from django.http import JsonResponse
 
@@ -10,28 +11,68 @@ log = logging.getLogger(__name__)
 
 class CourseApprovalMiddleware:
     """
-    Blocks non-global-staff users from:
+    Blocks users who are NOT an admin of the course from:
     - Publishing course content (units, sections, subsections)
     - Exporting courses (IP protection)
     - Writing to Advanced Settings (prevents visibility/start date changes)
 
-    Django User.is_staff (global admin flag) is checked.
-    Course-level "Staff" role does NOT set is_staff — those users are blocked.
+    A user is treated as an admin (and bypasses all restrictions) if ANY of:
+    - Django global staff / superuser (platform-wide admin), OR
+    - Studio Course Team "Admin" of the course being acted on — internally the
+      course-level ``instructor`` role (CourseInstructorRole).
+
+    Studio Course Team "Staff" (course-level ``staff`` role) is NOT an admin and
+    is blocked — those users must use "Notify Admin for Review".
     """
 
     def __init__(self, get_response):
         self.get_response = get_response
 
+    def _course_key_from_path(self, path):
+        """Extract the CourseKey a request acts on, from a course-v1 or block-v1 key in the path."""
+        from opaque_keys.edx.keys import CourseKey, UsageKey
+        m = re.search(r'course-v1:[^/?]+', path)
+        if m:
+            try:
+                return CourseKey.from_string(m.group(0))
+            except Exception:
+                pass
+        m = re.search(r'block-v1:[^/?]+', path)
+        if m:
+            try:
+                return UsageKey.from_string(m.group(0)).course_key
+            except Exception:
+                pass
+        return None
+
+    def _is_course_admin(self, user, course_key):
+        """True if the user is a Studio Course Team Admin (instructor role) of this course."""
+        if course_key is None:
+            return False
+        try:
+            from common.djangoapps.student.models import CourseAccessRole
+            return CourseAccessRole.objects.filter(
+                user=user, course_id=course_key, role='instructor'
+            ).exists()
+        except Exception:
+            log.exception('CourseApproval: error checking course-admin role for %s', course_key)
+            return False
+
     def __call__(self, request):
         if not hasattr(request, 'user') or not request.user.is_authenticated:
             return self.get_response(request)
 
-        # Global staff (superusers/admins) bypass all restrictions
+        # Global staff (superusers/platform admins) bypass all restrictions
         if request.user.is_staff or request.user.is_superuser:
             return self.get_response(request)
 
         path = request.path
         method = request.method
+
+        # Course Admins (Studio Course Team "Admin" = instructor role) bypass
+        # restrictions for THEIR OWN course — they may publish and export it.
+        if self._is_course_admin(request.user, self._course_key_from_path(path)):
+            return self.get_response(request)
 
         # Block course export
         if ('/export/' in path or '/course_export/' in path) and method in ('GET', 'POST'):
